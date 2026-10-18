@@ -40,7 +40,7 @@ Private credentials, browser sessions, existing published artifacts.
 - [x] Negative auth/body/stream scenarios pass; no retries and no browser credential leak.
 - [x] Desktop and mobile browser layouts pass without horizontal overflow.
 ### Validation Results
-Typecheck, 8 server tests, production browser/Functions builds, 3 Chromium/WebKit browser tests and npm audit pass. Desktop/mobile screenshots visually inspected. Physical iPhone and real-provider proof remain pending.
+Typecheck, 9 server tests, production browser/Functions builds, 3 Chromium/WebKit browser tests and npm audit pass. Desktop/mobile screenshots visually inspected. Physical iPhone and real-provider proof remain pending.
 
 ## Step B: Deployment and standalone proof
 ### Status
