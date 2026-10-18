@@ -94,3 +94,16 @@ test('public configuration and sanitized errors expose no server values', async 
   assert.equal(error.headers.get('Cache-Control'), 'no-store');
   assert.match(error.headers.get('Content-Security-Policy')!, /frame-ancestors 'none'/);
 });
+test('client cancellation aborts the single upstream request without a paid retry', async () => {
+  let upstreamSignal: AbortSignal | undefined; let paidCalls = 0;
+  const mock = async (url: unknown, init?: RequestInit) => {
+    if (String(url).includes('siteverify')) return Response.json({ success: true, hostname: 'hearthside-chat.pages.dev', action: 'chat' });
+    paidCalls++; upstreamSignal = init!.signal!;
+    return new Response(new ReadableStream({
+      start(stream) { upstreamSignal!.addEventListener('abort', () => stream.error(new Error('synthetic-abort')), { once: true }); },
+    }), { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  const response = await chat(await request(), env, mock as typeof fetch);
+  await response.body!.cancel();
+  assert.equal(upstreamSignal?.aborted, true); assert.equal(paidCalls, 1);
+});
