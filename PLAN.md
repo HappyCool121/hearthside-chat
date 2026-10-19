@@ -44,16 +44,19 @@ Typecheck, 9 server tests, production browser/Functions builds, 3 Chromium/WebKi
 
 ## Step B: Deployment and standalone proof
 ### Status
-`todo`
+`done`
 ### Tasks
-- [ ] Review and merge source PR; deploy exact clean main through Wrangler.
-- [ ] Operator creates Turnstile widget and enters server secrets through platform prompts.
-- [ ] Operator verifies desktop and iPhone Safari chat; record P1 metadata and tag v0.1-standalone.
-- [ ] Pause direct inference after P1 before integration.
+- [x] Review and merge source PR; deploy exact clean main through Wrangler.
+- [x] Operator creates Turnstile widget and enters server secrets through platform prompts.
+- [x] Operator verifies desktop and iPhone Safari chat; record P1 metadata and tag v0.1-standalone.
+- [x] Pause direct inference after P1 before integration.
 ### Acceptance Criteria
-- [ ] Public standalone inference works; artifact IDs and P1 result recorded without chat content.
+- [x] Public standalone inference works; artifact IDs and P1 result recorded without chat content.
 ### Validation Results
-Not run.
+P1 passed on 19 October 2026 (operator-attested): desktop Safari and physical iPhone Safari on
+deployment 1f3c7412 from f40244d. Annotated tag v0.1-standalone points to f40244d. Paused again
+in deployment 2dbff893 from the same commit: `/api/config` enabled false, chat 503 before any
+provider call. Recorded in adrouter/operations #6.
 
 ## Step C: Final verification and cleanup
 ### Status
@@ -66,10 +69,29 @@ Not run.
 ### Validation Results
 Not run.
 
+## Step D: Onboard to AdRouter
+### Status
+`review`
+### Tasks
+- [x] Verify and install the SDK 0.1.0 release tarball; follow only its public README and the console.
+- [x] Replace the direct adapter, cookie and trimming with the SDK proxy, client and SponsoredCard.
+- [x] Map existing bindings; add the paused-by-default ADROUTER_ENABLED switch and an opt-out.
+- [x] Record friction in ONBOARDING-NOTES.md.
+- [ ] Operator reviews the binding inventory and merges; deploy paused; ordered activation.
+- [ ] After the first successful gateway turn, delete DEEPSEEK_API_KEY and STANDALONE_ENABLED.
+### Acceptance Criteria
+- [x] No direct-provider code or fallback; paused publisher never reaches Turnstile or the gateway.
+- [x] Card shows every required label and passes the SDK render and visibility checks in tests.
+- [ ] P2 recorded after review; P3–P11 follow on the hosted gateway.
+### Validation Results
+Typecheck, 7 server tests, production browser/Functions builds, 4 Chromium/WebKit browser tests
+and npm audit pass. Hosted gateway behaviour is not yet exercised.
+
 ## Follow-up Work
-After P1, one onboarding PR installs the public release and removes the direct-provider secret.
+P2–P11 acceptance on desktop and physical iPhone Safari after ordered activation.
 
 ## Decision Log
 | Date | Decision | Rationale | Impact |
 | --- | --- | --- | --- |
 | 2026-10-18 | Independent standalone first; inference paused by default | Operator's execution sequence | P1 precedes SDK integration |
+| 2026-10-19 | Core SDK client with React SponsoredCard, not useAdRouterChat | The hook cannot be seeded from browser history | Reload persistence and New story keep working |
