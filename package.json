@@ -17,6 +17,7 @@
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
+    "@adrouter/browser-sdk": "https://github.com/adrouter/browser-sdk/releases/download/v0.1.0/adrouter-browser-sdk-0.1.0.tgz",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },

@@ -1,9 +1,15 @@
 # Hearthside
 
 A small character chat. Meet Rowan, the keeper of an imagined forest inn.
-React/Vite serves the browser; a Cloudflare Pages Function calls DeepSeek directly and streams
-the reply. The character prompt and provider key stay on the server. No publisher database,
-analytics, gateway or advertising SDK is included in this standalone version.
+React/Vite serves the browser. Cloudflare Pages Functions relay each turn to the AdRouter V3
+gateway through the public [AdRouter browser SDK 0.1.0](https://github.com/adrouter/browser-sdk).
+The gateway calls DeepSeek with the publisher's own key (BYOK) and may offer a sponsored card
+beside the unchanged answer. The character prompt and every credential stay on the server.
+
+The standalone version, which called DeepSeek directly with no AdRouter code, is tag
+[`v0.1-standalone`](https://github.com/HappyCool121/hearthside-chat/tree/v0.1-standalone). It
+passed standalone acceptance on 19 October 2026. [ONBOARDING-NOTES.md](ONBOARDING-NOTES.md)
+records the friction of the onboarding change.
 
 ## Run and verify
 
@@ -19,105 +25,105 @@ npm run test:browser
 
 `npm run dev` previews the interface only. `npm run preview` serves the built interface and
 Functions with Wrangler. Inference requires the exact configured HTTPS origin, a Cloudflare
-trusted IP and a real Turnstile widget. Tests inject synthetic transport responses; they never
-make paid calls. Browser tests use Chromium and WebKit. Install their engines with
-`npx playwright install chromium webkit` if needed. WebKit emulation does not prove iPhone Safari.
+trusted IP, a real Turnstile widget and an approved AdRouter app. Tests inject synthetic
+Turnstile, gateway and measurement responses; they never make paid calls. Browser tests use
+Chromium and WebKit. Install their engines with `npx playwright install chromium webkit` if
+needed. WebKit emulation does not prove iPhone Safari.
 
-## Deploy to Cloudflare Pages
+The SDK comes from its GitHub release tarball, not npm. Before changing it, verify the downloaded
+tarball's SHA-256 against the release's `.tgz.json` manifest. The lockfile pins its integrity.
 
-The project is `hearthside-chat`; production origin is `https://hearthside-chat.pages.dev`.
-It uses direct upload, so merging a GitHub PR does not deploy it. Use Wrangler because the
-deployment includes Functions. All release source and the lockfile must be reviewed and merged
-before deployment. The deployment script rejects a dirty checkout or a commit differing from
-the fetched `origin/main`.
+## What the onboarding changed
 
-```sh
-git fetch origin main
-git switch main
-git merge --ff-only origin/main
-npm ci
-npx wrangler whoami
-npm run deploy
-```
-
-Select the intended Cloudflare account with `CLOUDFLARE_ACCOUNT_ID` in the deployment shell.
-The project must exist as a direct-upload Pages project with production branch `main`.
-
-Create a managed Turnstile widget for `hearthside-chat.pages.dev`. Enter values yourself using
-the interactive prompts below. Never paste secret values into chat, command arguments, source,
-logs or screenshots. A session secret needs at least 32 random bytes from a password manager.
-
-```sh
-npx wrangler pages secret put TURNSTILE_SITE_KEY --project-name hearthside-chat
-npx wrangler pages secret put TURNSTILE_SECRET_KEY --project-name hearthside-chat
-npx wrangler pages secret put SESSION_SECRET --project-name hearthside-chat
-npx wrangler pages secret put DEEPSEEK_API_KEY --project-name hearthside-chat
-```
-
-When ready for the short standalone acceptance session, set `STANDALONE_ENABLED` to `true`
-using the platform prompt, then deploy the same clean merged commit again so its bindings apply:
-
-```sh
-npx wrangler pages secret put STANDALONE_ENABLED --project-name hearthside-chat
-npm run deploy
-```
-
-After desktop and iPhone Safari acceptance, set it to `false` with the same command and redeploy.
-Only tag `v0.1-standalone` after the public chat has passed standalone acceptance. This tag records
-the independent source baseline for the later onboarding PR.
+| Standalone (`v0.1-standalone`) | Onboarded |
+| --- | --- |
+| `server/chat.ts` called `api.deepseek.com` directly | `server/adrouter.ts` builds `createPublisherProxy` for the gateway |
+| `__Host-hearthside` session cookie | SDK `__Host-adr_session` cookie, signed with the same `SESSION_SECRET` |
+| `shared/history.ts` trimmed history | SDK client trims to 14 messages and 12,000 bytes, with the same visible notice |
+| `/api/chat` streamed text events | `/api/chat`, `/api/turns/:id`, `/api/turns/:id/cancel`, `/api/feedback` and `/api/client-events` relay gateway events |
+| Empty reserved card area | `SponsoredCard` in the reserved area, plus a "Show sponsored suggestions" opt-out |
+| `STANDALONE_ENABLED` switch | `ADROUTER_ENABLED` switch; no direct-provider fallback remains |
 
 ## Binding inventory
 
-| Binding | Visibility | Purpose |
+| Binding | Where | Purpose |
 | --- | --- | --- |
-| `PUBLIC_ORIGIN` | Public, in Wrangler config | Exact HTTPS origin for mutation checks |
-| `TURNSTILE_SITE_KEY` | Public, returned by `/api/config` | Hostname-specific widget |
-| `STANDALONE_ENABLED` | Public state, defaults to paused | Explicit direct-inference switch |
-| `TURNSTILE_SECRET_KEY` | Server secret | Turnstile verification, hostname and `chat` action |
-| `SESSION_SECRET` | Server secret | HMAC signing for `__Host-hearthside` cookies |
-| `DEEPSEEK_API_KEY` | Server secret | Direct provider calls during standalone proof |
+| `PUBLIC_ORIGIN` | Wrangler var (SDK `allowedOrigin`) | Exact HTTPS publisher origin |
+| `ADROUTER_GATEWAY_ORIGIN` | Wrangler var | `https://adrouter-v3.fly.dev` |
+| `ADROUTER_MODEL` | Wrangler var | Catalog model `deepseek-v4-flash` of the qualified connection |
+| `TURNSTILE_SITE_KEY` | Pages secret, returned by `/api/config` | Public, hostname-specific widget key |
+| `TURNSTILE_SECRET_KEY` | Pages secret (SDK `turnstileSecret`) | Turnstile success, hostname and `chat` action |
+| `SESSION_SECRET` | Pages secret (SDK `sessionSigningSecret`) | Signs `__Host-adr_session` cookies; at least 32 random bytes |
+| `REFERENCE_HMAC_SECRET` | Pages secret | Pseudonymous session and IP references; a separate value of at least 32 random bytes |
+| `ADROUTER_APP_CREDENTIAL` | Pages secret | Publisher key issued in the AdRouter console |
+| `ADROUTER_PROVIDER_CONNECTION_ID` | Pages secret | Qualified DeepSeek connection ID from the console (not a credential) |
+| `ADROUTER_PLACEMENT_ID` | Pages secret | Reviewed placement ID from the console (not a credential) |
+| `ADROUTER_ENABLED` | Pages secret, defaults to paused | Explicit publisher switch; chat is refused unless it is `true` |
 
-Only enabled state, the site key and model ID reach `/api/config`. No Vite environment variables
-are needed. The browser bundle must never contain the character prompt or a server credential.
-The session cookie is Secure, HttpOnly, SameSite=Strict and valid for one day. All mutating routes
-reject other origins. The trusted IP header comes from Cloudflare; do not expose the Function
-behind a proxy that permits the caller to choose it.
+`/api/config` reports enabled only when the switch is `true` and every binding is present. It
+exposes only that state, the site key and the model ID. No Vite environment variables are needed.
+The browser bundle never contains the character prompt or a server credential. The
+`DEEPSEEK_API_KEY` and `STANDALONE_ENABLED` secrets from the standalone version are no longer
+read; delete them after the first successful gateway turn.
+
+## Deploy and enable
+
+The project is `hearthside-chat` on Cloudflare Pages; production origin is
+`https://hearthside-chat.pages.dev`. It uses direct upload, so merging a GitHub PR does not deploy
+it. The deployment script rejects a dirty checkout or a commit differing from the fetched
+`origin/main`. Select the account with `CLOUDFLARE_ACCOUNT_ID` in the deployment shell.
+
+Enter credential values yourself at the interactive prompts. Never paste secret values into chat,
+command arguments, source, logs or screenshots.
+
+```sh
+npx wrangler pages secret put ADROUTER_APP_CREDENTIAL --project-name hearthside-chat
+npx wrangler pages secret put REFERENCE_HMAC_SECRET --project-name hearthside-chat
+npx wrangler pages secret put ADROUTER_PROVIDER_CONNECTION_ID --project-name hearthside-chat
+npx wrangler pages secret put ADROUTER_PLACEMENT_ID --project-name hearthside-chat
+npm run deploy
+```
+
+Deploy first with `ADROUTER_ENABLED` unset, so the publisher stays paused. Enable in this order:
+
+1. Gateway admission on.
+2. Console readiness shows no blockers.
+3. Enable the Hearthside app in the console.
+4. Set `ADROUTER_ENABLED` to `true` with `wrangler pages secret put`, then `npm run deploy`.
+5. Complete one gateway turn and confirm a successful model outcome in the console.
+6. Delete `DEEPSEEK_API_KEY` and `STANDALONE_ENABLED` with `wrangler pages secret delete`, then
+   `npm run deploy` again.
+
+To pause, set `ADROUTER_ENABLED` to `false` and deploy, then pause the app in the console.
 
 ## Requests, storage and cost
 
-Each turn verifies Turnstile on the server before one direct request to
-`https://api.deepseek.com/chat/completions`. The model is `deepseek-v4-flash`, resolved from the
-canonical model catalog on 18 October 2026 (catalog schema 2, digest
-`sha256:82df16507c35823aa8256f958af1e22042935399ebfd273d819459e8fe859a19`). Thinking is
-disabled and output is capped at 512 tokens. The provider bills the key's owner; this is not free
-inference. No automatic provider retries, fallback provider, tool calls or paid replays exist.
-The 60-second deadline and Stop button abort the upstream request. An interrupted reply is
-removed from stored history and is not reported as completed. A paid call may already have been
-consumed even when no answer completes; do not automatically resubmit it.
+Each turn creates a signed session, then sends the visible conversation and a fresh Turnstile
+token to `/api/chat`. The Function verifies Turnstile and forwards the turn, with the server-owned
+prompt, to the gateway. The gateway calls `deepseek-v4-flash` with thinking off and output capped
+at 512 tokens. DeepSeek bills the publisher's own key, held in the gateway's encrypted provider
+connection. This is not free inference. No automatic retries, fallback provider or paid replays
+exist. Stop cancels the turn. An interrupted reply is shown as "interrupted, not kept" and is
+never stored or sent back to the model. A paid call may already have been consumed even when no
+answer completes; do not automatically resubmit it.
 
-Requests are limited to 64 KiB. Browser history sent to the provider is limited to 14 messages and
-12,000 UTF-8 bytes, dropping the oldest messages first and displaying a notice. The latest user
-message is kept intact; an oversized latest message is rejected. These byte limits are not an
-exact tokenizer. Input, output and Turnstile tokens are processed transiently and never logged
-by application code. Disable request-body collection in any additional monitoring you configure.
+Gateway limits are 50 turns per session, 100 per IP, 1,000 per app and 2,000 overall per
+Singapore day, with one active turn at a time. History sent to the model is limited to 14
+messages and 12,000 UTF-8 bytes, dropping the oldest first and showing a notice. The latest
+message is kept intact; an oversized latest message is rejected.
 
-Up to 100 messages are saved in this browser's local storage, without any server transcript.
-“New story” clears that local transcript after confirmation. Do not use the chat for sensitive
-personal information. The browser sends retained conversation text to the provider for inference.
+Up to 100 messages are saved in this browser's local storage, without any publisher database or
+server transcript. "New story" clears them after confirmation. Do not use the chat for sensitive
+personal information. Sensitive topics never receive a sponsored card, and the answer continues.
 
-## Standalone acceptance and later onboarding
+## Sponsored cards
 
-Verify a completed response, Stop, an interrupted stream, reload persistence, “New story”,
-visible history trimming, a narrow viewport and the real iPhone Safari keyboard. Record only
-source SHA, deployment ID, date and pass/fail outcomes, without prompts or replies. P1 requires
-working direct chat on the public URL before any gateway integration.
-
-The reserved card area is empty in standalone. The later “Onboard to AdRouter” PR will follow
-the public SDK README, install its release tarball, replace this direct adapter and client stream,
-and record friction in `ONBOARDING-NOTES.md`. No direct-provider fallback may remain after cutover;
-the operator deletes this project's DeepSeek secret after the gateway integration succeeds.
-Sponsored cards must visibly say “Sponsored” and identify the advertiser. Fictional demo cards
-also require “Demo campaign · fictional brand · not a paid placement”. Their text stays outside
-model messages, stored conversation and copied answers.
+Every card visibly shows "Sponsored", the advertiser, the title and body, and a destination link.
+Pilot cards are fictional and also show "Demo campaign · fictional brand · not a paid placement";
+their destination is AdRouter's fictional-brand disclaimer page. Card text stays outside model
+messages, stored conversation and copied answers. Untick "Show sponsored suggestions" to opt out;
+the answer is unchanged. A card counts as a test view only after at least half of it has been
+visible for one continuous second in a focused window. Test views are not revenue, and no money
+moves to the publisher in this pilot.
 
 Licensed under MIT. The character and scene are fictional.

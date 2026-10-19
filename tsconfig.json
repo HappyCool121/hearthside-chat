@@ -5,5 +5,5 @@
     "strict": true, "noEmit": true, "skipLibCheck": true,
     "allowImportingTsExtensions": true, "types": ["vite/client"]
   },
-  "include": ["src", "server", "functions", "shared"]
+  "include": ["src", "server", "functions"]
 }
