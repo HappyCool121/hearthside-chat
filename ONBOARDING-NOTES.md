@@ -15,6 +15,9 @@ AdRouter console. The standalone baseline is tag `v0.1-standalone` (f40244d), wh
    client and `SponsoredCard`.
 5. Added the gateway measurement origin to the CSP, a paused-by-default `ADROUTER_ENABLED`
    switch and a visible sponsorship opt-out.
+6. After the first hosted test failed (friction 12), installed `adrouter-browser-sdk-0.1.1.tgz`
+   from the v0.1.1 release the same way. The SHA-256 (`d990f6b5…3134`) and sha512 integrity
+   matched the manifest.
 
 ## Friction
 
