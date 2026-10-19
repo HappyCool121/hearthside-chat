@@ -77,15 +77,19 @@ Not run.
 - [x] Replace the direct adapter, cookie and trimming with the SDK proxy, client and SponsoredCard.
 - [x] Map existing bindings; add the paused-by-default ADROUTER_ENABLED switch and an opt-out.
 - [x] Record friction in ONBOARDING-NOTES.md.
-- [ ] Operator reviews the binding inventory and merges; deploy paused; ordered activation.
+- [x] Operator reviews the binding inventory and merges; deploy paused; ordered activation.
+- [x] First hosted test failed on SDK 0.1.0 (friction 12): install the SDK 0.1.1 release tarball and
+      run the built Functions in workerd in CI.
+- [ ] Deploy SDK 0.1.1 and complete one successful gateway turn.
 - [ ] After the first successful gateway turn, delete DEEPSEEK_API_KEY and STANDALONE_ENABLED.
 ### Acceptance Criteria
 - [x] No direct-provider code or fallback; paused publisher never reaches Turnstile or the gateway.
 - [x] Card shows every required label and passes the SDK render and visibility checks in tests.
 - [ ] P2 recorded after review; P3–P11 follow on the hosted gateway.
 ### Validation Results
-Typecheck, 7 server tests, production browser/Functions builds, 4 Chromium/WebKit browser tests
-and npm audit pass. Hosted gateway behaviour is not yet exercised.
+Typecheck, 7 server tests, production browser/Functions builds, 4 workerd Functions tests,
+4 Chromium/WebKit browser tests and npm audit pass. The first hosted test, on SDK 0.1.0, never
+reached the gateway. SDK 0.1.1 is not yet exercised on the hosted gateway.
 
 ## Follow-up Work
 P2–P11 acceptance on desktop and physical iPhone Safari after ordered activation.
@@ -95,3 +99,4 @@ P2–P11 acceptance on desktop and physical iPhone Safari after ordered activati
 | --- | --- | --- | --- |
 | 2026-10-18 | Independent standalone first; inference paused by default | Operator's execution sequence | P1 precedes SDK integration |
 | 2026-10-19 | Core SDK client with React SponsoredCard, not useAdRouterChat | The hook cannot be seeded from browser history | Reload persistence and New story keep working |
+| 2026-10-19 | Fix the Workers relay in SDK 0.1.1, not inside Hearthside | Released SDK bytes are immutable, and P2 follows only the public SDK | One dependency change; `test:workerd` guards the runtime |
