@@ -2,7 +2,7 @@
 
 A small character chat. Meet Rowan, the keeper of an imagined forest inn.
 React/Vite serves the browser. Cloudflare Pages Functions relay each turn to the AdRouter V3
-gateway through the public [AdRouter browser SDK 0.1.0](https://github.com/adrouter/browser-sdk).
+gateway through the public [AdRouter browser SDK 0.1.1](https://github.com/adrouter/browser-sdk).
 The gateway calls DeepSeek with the publisher's own key (BYOK) and may offer a sponsored card
 beside the unchanged answer. The character prompt and every credential stay on the server.
 
@@ -19,14 +19,16 @@ Requires Node.js 22.13 or newer and npm. Install exactly the locked dependencies
 npm ci
 npm test
 npm run build
-npm run build:functions
+npm run test:workerd
 npm run test:browser
 ```
 
 `npm run dev` previews the interface only. `npm run preview` serves the built interface and
 Functions with Wrangler. Inference requires the exact configured HTTPS origin, a Cloudflare
 trusted IP, a real Turnstile widget and an approved AdRouter app. Tests inject synthetic
-Turnstile, gateway and measurement responses; they never make paid calls. Browser tests use
+Turnstile, gateway and measurement responses; they never make paid calls. `test:workerd` builds
+the Functions bundle and runs it in workerd, the Cloudflare runtime, with every outbound fetch
+intercepted. Browser tests use
 Chromium and WebKit. Install their engines with `npx playwright install chromium webkit` if
 needed. WebKit emulation does not prove iPhone Safari.
 

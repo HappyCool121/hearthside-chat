@@ -31,8 +31,9 @@ AdRouter console. The standalone baseline is tag `v0.1-standalone` (f40244d), wh
 | 9 | §5 measurement | The renderer's checks are stricter than the prose: every element at least 12px, no positioned `pointer-events:none` layer overlapping, at most 2,000 body elements | Card kept in normal flow between the conversation and composer; browser tests assert `rendered` and `visibility` with no `render_failed` in Chromium and WebKit |
 | 10 | §1 install | "Verify downloaded tarballs" gives no command | `shasum -a 256` against the manifest's `sha256`, then the lockfile integrity |
 | 11 | §6 interruption | The README asks publishers to keep an interrupted partial answer separate from history, but standalone Hearthside discarded it | The partial reply is shown as "interrupted, not kept"; it is never stored or sent |
+| 12 | §2 runtime | First hosted test: every `/api/chat` returned 503 `service_unavailable` while `/api/session` worked, and the console recorded no turns. SDK 0.1.0's gateway relay passed `redirect: 'error'` to `fetch`, which the Workers runtime rejects with a TypeError after Turnstile and before any gateway request. Node tests stubbed `fetch`, so nothing caught it | Fixed in SDK 0.1.1. `test:workerd` now runs the built Functions in workerd and fails on 0.1.0 |
 
-No friction was found in the session, Turnstile, persona, trimming or proxy routes. The static
+No other friction was found in the session, Turnstile, persona or trimming. The static
 `systemInstruction` path needed no persona header.
 
 ## Console and activation (to be completed)
