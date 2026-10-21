@@ -1,15 +1,18 @@
 # Hearthside
 
 A small character chat. Meet Rowan, the keeper of an imagined forest inn.
-React/Vite serves the browser. Cloudflare Pages Functions relay each turn to the AdRouter V3
-gateway through the public [AdRouter browser SDK 0.1.1](https://github.com/adrouter/browser-sdk).
-The gateway calls DeepSeek with the publisher's own key (BYOK) and may offer a sponsored card
-beside the unchanged answer. The character prompt and every credential stay on the server.
+React/Vite serves the browser. A Cloudflare Pages Function calls DeepSeek with Hearthside's own
+key, as the standalone version did. Separately, the page asks AdRouter for a sponsored suggestion
+for the latest message and shows it beside a completed answer, using the
+[AdRouter browser SDK](https://github.com/adrouter/browser-sdk) 0.4.0. If AdRouter is off, paused or
+unreachable, Rowan answers exactly the same. The character prompt and every credential stay on the
+server.
 
-The standalone version, which called DeepSeek directly with no AdRouter code, is tag
-[`v0.1-standalone`](https://github.com/HappyCool121/hearthside-chat/tree/v0.1-standalone). It
-passed standalone acceptance on 19 October 2026. [ONBOARDING-NOTES.md](ONBOARDING-NOTES.md)
-records the friction of the onboarding change.
+The standalone version, with no AdRouter code, is tag
+[`v0.1-standalone`](https://github.com/HappyCool121/hearthside-chat/tree/v0.1-standalone). From
+19 to 21 October 2026 Hearthside instead routed its inference through the AdRouter gateway; AdRouter
+retired that path on 21 October (sponsor-only). [ONBOARDING-NOTES.md](ONBOARDING-NOTES.md) records the
+friction of both integrations.
 
 ## Run and verify
 
@@ -24,49 +27,44 @@ npm run test:browser
 ```
 
 `npm run dev` previews the interface only. `npm run preview` serves the built interface and
-Functions with Wrangler. Inference requires the exact configured HTTPS origin, a Cloudflare
-trusted IP, a real Turnstile widget and an approved AdRouter app. Tests inject synthetic
-Turnstile, gateway and measurement responses; they never make paid calls. `test:workerd` builds
-the Functions bundle and runs it in workerd, the Cloudflare runtime, with every outbound fetch
-intercepted. Browser tests use
-Chromium and WebKit. Install their engines with `npx playwright install chromium webkit` if
-needed. WebKit emulation does not prove iPhone Safari.
+Functions with Wrangler. Chat requires the exact configured HTTPS origin, a Cloudflare trusted IP
+and a real Turnstile widget. Tests inject synthetic Turnstile, DeepSeek and AdRouter responses; they
+never make paid calls. `test:workerd` runs the built Functions in workerd, the Cloudflare runtime,
+with every outbound fetch intercepted. Browser tests use Chromium and WebKit (install with
+`npx playwright install chromium webkit`); WebKit emulation does not prove iPhone Safari.
 
-The SDK comes from its GitHub release tarball, not npm. Before changing it, verify the downloaded
-tarball's SHA-256 against the release's `.tgz.json` manifest. The lockfile pins its integrity.
+The SDK is vendored as one file, `src/vendor/adrouter.min.js`, because 0.4.0 is a release candidate.
+`src/vendor/SOURCE.json` records the Router commit it was built from and its SHA-256. Once 0.4.0 is
+published, replace it with the release asset and check the hash.
 
-## What the onboarding changed
+## How the two halves fit
 
-| Standalone (`v0.1-standalone`) | Onboarded |
+| Concern | Where |
 | --- | --- |
-| `server/chat.ts` called `api.deepseek.com` directly | `server/adrouter.ts` builds `createPublisherProxy` for the gateway |
-| `__Host-hearthside` session cookie | SDK `__Host-adr_session` cookie, signed with the same `SESSION_SECRET` |
-| `shared/history.ts` trimmed history | SDK client trims to 14 messages and 12,000 bytes, with the same visible notice |
-| `/api/chat` streamed text events | `/api/chat`, `/api/turns/:id`, `/api/turns/:id/cancel`, `/api/feedback` and `/api/client-events` relay gateway events |
-| Empty reserved card area | `SponsoredCard` in the reserved area, plus a "Show sponsored suggestions" opt-out |
-| `STANDALONE_ENABLED` switch | `ADROUTER_ENABLED` switch; no direct-provider fallback remains |
+| Rowan's answers | `/api/chat` → DeepSeek (`deepseek-v4-flash`, thinking off, 512 output tokens), Turnstile and a `__Host-hearthside` session cookie |
+| History | The browser keeps up to 100 messages; 14 messages / 12,000 bytes go to the model, oldest dropped first with a notice |
+| Sponsors | The page calls `adrouter.match(latest message)` alongside the chat request, with the app's publishable key from `/api/config`. The card appears only beside a complete answer |
+| Measurement | The SDK reports rendered, viewed (half on screen for a second, tab visible) and clicked to AdRouter |
+| Switches | `CHAT_ENABLED` for chat, `ADROUTER_ENABLED` for sponsors; independent |
 
 ## Binding inventory
 
 | Binding | Where | Purpose |
 | --- | --- | --- |
-| `PUBLIC_ORIGIN` | Wrangler var (SDK `allowedOrigin`) | Exact HTTPS publisher origin |
-| `ADROUTER_GATEWAY_ORIGIN` | Wrangler var | `https://adrouter-v3.fly.dev` |
-| `ADROUTER_MODEL` | Wrangler var | Catalog model `deepseek-v4-flash` of the qualified connection |
+| `PUBLIC_ORIGIN` | Wrangler var | Exact HTTPS publisher origin |
+| `CHAT_ENABLED` | Pages secret, defaults to paused | Chat is refused unless it is `true` |
+| `DEEPSEEK_API_KEY` | Pages secret | Hearthside's own DeepSeek key |
 | `TURNSTILE_SITE_KEY` | Pages secret, returned by `/api/config` | Public, hostname-specific widget key |
-| `TURNSTILE_SECRET_KEY` | Pages secret (SDK `turnstileSecret`) | Turnstile success, hostname and `chat` action |
-| `SESSION_SECRET` | Pages secret (SDK `sessionSigningSecret`) | Signs `__Host-adr_session` cookies; at least 32 random bytes |
-| `REFERENCE_HMAC_SECRET` | Pages secret | Pseudonymous session and IP references; a separate value of at least 32 random bytes |
-| `ADROUTER_APP_CREDENTIAL` | Pages secret | Publisher key issued in the AdRouter console |
-| `ADROUTER_PROVIDER_CONNECTION_ID` | Pages secret | Qualified DeepSeek connection ID from the console (not a credential) |
-| `ADROUTER_PLACEMENT_ID` | Pages secret | Reviewed placement ID from the console (not a credential) |
-| `ADROUTER_ENABLED` | Pages secret, defaults to paused | Explicit publisher switch; chat is refused unless it is `true` |
+| `TURNSTILE_SECRET_KEY` | Pages secret | Turnstile success, hostname and `chat` action |
+| `SESSION_SECRET` | Pages secret | Signs `__Host-hearthside` cookies; at least 32 random bytes |
+| `ADROUTER_ENABLED` | Pages secret, defaults to off | Sponsored suggestions are shown only when it is `true` |
+| `ADROUTER_PUBLIC_KEY` | Pages secret, returned by `/api/config` | The app's publishable key (`v3pk_…`) from the AdRouter console; public by design, works only from `PUBLIC_ORIGIN` |
 
-`/api/config` reports enabled only when the switch is `true` and every binding is present. It
-exposes only that state, the site key and the model ID. No Vite environment variables are needed.
-The browser bundle never contains the character prompt or a server credential. The
-`DEEPSEEK_API_KEY` and `STANDALONE_ENABLED` secrets from the standalone version are no longer
-read; delete them after the first successful gateway turn.
+`/api/config` returns the chat state, the Turnstile site key and, when sponsors are on, the publishable
+key and `https://api.adrouter.co`. The browser bundle never contains the character prompt, the
+DeepSeek key or any other server credential. The gateway-era bindings `ADROUTER_APP_CREDENTIAL`,
+`ADROUTER_PROVIDER_CONNECTION_ID`, `ADROUTER_PLACEMENT_ID`, `REFERENCE_HMAC_SECRET`,
+`ADROUTER_GATEWAY_ORIGIN` and `ADROUTER_MODEL` are no longer read; delete them.
 
 ## Deploy and enable
 
@@ -79,53 +77,39 @@ Enter credential values yourself at the interactive prompts. Never paste secret 
 command arguments, source, logs or screenshots.
 
 ```sh
-npx wrangler pages secret put ADROUTER_APP_CREDENTIAL --project-name hearthside-chat
-npx wrangler pages secret put REFERENCE_HMAC_SECRET --project-name hearthside-chat
-npx wrangler pages secret put ADROUTER_PROVIDER_CONNECTION_ID --project-name hearthside-chat
-npx wrangler pages secret put ADROUTER_PLACEMENT_ID --project-name hearthside-chat
+npx wrangler pages secret put DEEPSEEK_API_KEY --project-name hearthside-chat
+npx wrangler pages secret put ADROUTER_PUBLIC_KEY --project-name hearthside-chat
 npm run deploy
 ```
 
-Deploy first with `ADROUTER_ENABLED` unset, so the publisher stays paused. Enable in this order:
+Deploy first with `CHAT_ENABLED` and `ADROUTER_ENABLED` unset. Then:
 
-1. Gateway admission on.
-2. Console readiness shows no blockers.
-3. Enable the Hearthside app in the console.
-4. Set `ADROUTER_ENABLED` to `true` with `wrangler pages secret put`, then `npm run deploy`.
-5. Complete one gateway turn and confirm a successful model outcome in the console.
-6. Delete `DEEPSEEK_API_KEY` and `STANDALONE_ENABLED` with `wrangler pages secret delete`, then
-   `npm run deploy` again.
+1. Set `CHAT_ENABLED` to `true` and deploy; confirm Rowan answers.
+2. In the AdRouter console, create a publishable key for the app; an owner reviews the site and enables the app.
+3. Set `ADROUTER_ENABLED` to `true` and deploy; confirm a card appears beside an answer.
 
-To pause, set `ADROUTER_ENABLED` to `false` and deploy, then pause the app in the console.
+To pause sponsors only, set `ADROUTER_ENABLED` to `false` and deploy (or pause the app in the
+console); chat continues. To pause chat, set `CHAT_ENABLED` to `false` and deploy.
 
 ## Requests, storage and cost
 
-Each turn creates a signed session, then sends the visible conversation and a fresh Turnstile
-token to `/api/chat`. The Function verifies Turnstile and forwards the turn, with the server-owned
-prompt, to the gateway. The gateway calls `deepseek-v4-flash` with thinking off and output capped
-at 512 tokens. DeepSeek bills the publisher's own key, held in the gateway's encrypted provider
-connection. This is not free inference. No automatic retries, fallback provider or paid replays
-exist. Stop cancels the turn. An interrupted reply is shown as "interrupted, not kept" and is
-never stored or sent back to the model. A paid call may already have been consumed even when no
-answer completes; do not automatically resubmit it.
+Each message creates or checks a signed session, then sends the visible conversation and a fresh
+Turnstile token to `/api/chat`. The Function verifies Turnstile and calls DeepSeek once with the
+server-owned prompt; DeepSeek bills Hearthside's own key. No automatic retries, fallback provider or
+paid replays exist. Stop cancels the reply. An interrupted reply is never stored or sent back to the model.
 
-Gateway limits are 50 turns per session, 100 per IP, 1,000 per app and 2,000 overall per
-Singapore day, with one active turn at a time. History sent to the model is limited to 14
-messages and 12,000 UTF-8 bytes, dropping the oldest first and showing a notice. The latest
-message is kept intact; an oversized latest message is rejected.
-
-Up to 100 messages are saved in this browser's local storage, without any publisher database or
-server transcript. "New story" clears them after confirmation. Do not use the chat for sensitive
-personal information. Sensitive topics never receive a sponsored card, and the answer continues.
+When sponsors are on and the visitor has not opted out, the latest message (only that message) is sent
+to AdRouter, which may keep it for up to 90 days to measure and improve sponsor matching. Up to 100
+messages are saved in this browser's local storage, without any publisher database or server
+transcript. "New story" clears them after confirmation. Do not use the chat for sensitive personal
+information. Sensitive topics never receive a sponsored card, and the answer continues.
 
 ## Sponsored cards
 
 Every card visibly shows "Sponsored", the advertiser, the title and body, and a destination link.
-Pilot cards are fictional and also show "Demo campaign · fictional brand · not a paid placement";
-their destination is AdRouter's fictional-brand disclaimer page. Card text stays outside model
-messages, stored conversation and copied answers. Untick "Show sponsored suggestions" to opt out;
-the answer is unchanged. A card counts as a test view only after at least half of it has been
-visible for one continuous second in a focused window. Test views are not revenue, and no money
-moves to the publisher in this pilot.
+Demo cards are fictional and also show "Demo campaign · fictional brand · not a paid placement".
+Card text stays outside model messages, stored conversation and copied answers. Untick "Show
+sponsored suggestions" to opt out; nothing is sent to AdRouter and the answer is unchanged. Views are
+counts, not revenue; no money moves to the publisher in this test.
 
 Licensed under MIT. The character and scene are fictional.

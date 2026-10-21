@@ -49,3 +49,15 @@ gateway turn will be recorded as outcomes only, with no IDs that are credentials
 - Inventory `demo-2026-10-19.1` loaded and prepared (32): _pending_
 - Placement reviewed and publisher key issued: _pending_
 - First gateway turn succeeded; publisher DeepSeek secret deleted: _pending_
+
+## Sponsor-only integration, 21 October 2026
+
+AdRouter retired its inference gateway, so Hearthside went back to calling DeepSeek itself and added a
+sponsor call from the page. Compared with the gateway integration:
+
+- No server changes for AdRouter at all: the publishable key is public and goes to the page through `/api/config`.
+- The chat path is the standalone code again; AdRouter cannot break it.
+- One CSP entry (`connect-src https://api.adrouter.co`) in both `server/security.ts` and `public/_headers`.
+- The default card is unstyled on request and styled with Hearthside's own CSS (`adr-*` classes); no
+  readability or overlay checks to satisfy.
+- Friction: SDK 0.4.0 is not published yet, so the single-file bundle is vendored with its source commit and hash.

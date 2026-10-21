@@ -18,7 +18,6 @@
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
-    "@adrouter/browser-sdk": "https://github.com/adrouter/browser-sdk/releases/download/v0.1.1/adrouter-browser-sdk-0.1.1.tgz",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -29,7 +28,7 @@
     "playwright": "1.61.1",
     "tsx": "4.22.4",
     "typescript": "5.8.3",
-    "vite": "6.4.3",
+    "vite": "6.4.5",
     "wrangler": "4.151.1"
   }
 }

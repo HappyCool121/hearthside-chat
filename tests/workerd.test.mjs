@@ -8,89 +8,58 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 // intercepted, so these tests make no network or paid calls.
 const script = await readFile('output/functions/index.js', 'utf8');
 const origin = 'https://hearthside-chat.pages.dev';
-const GATEWAY = 'https://adrouter-v3.fly.dev';
-const bindings = { PUBLIC_ORIGIN: origin, ADROUTER_GATEWAY_ORIGIN: GATEWAY, ADROUTER_MODEL: 'deepseek-v4-flash',
-  ADROUTER_ENABLED: 'true', ADROUTER_APP_CREDENTIAL: 'synthetic-app-credential-fixture',
-  ADROUTER_PROVIDER_CONNECTION_ID: 'synthetic-connection', ADROUTER_PLACEMENT_ID: 'synthetic-placement',
-  REFERENCE_HMAC_SECRET: randomBytes(32).toString('hex'), TURNSTILE_SITE_KEY: 'synthetic-public-site',
-  TURNSTILE_SECRET_KEY: 'synthetic-server-challenge', SESSION_SECRET: randomBytes(32).toString('hex') };
-const STREAM = '{"type":"turn.started"}\n{"type":"turn.completed"}\n';
+const bindings = { PUBLIC_ORIGIN: origin, CHAT_ENABLED: 'true', TURNSTILE_SITE_KEY: 'synthetic-public-site',
+  TURNSTILE_SECRET_KEY: 'synthetic-server-challenge', SESSION_SECRET: randomBytes(32).toString('hex'), DEEPSEEK_API_KEY: 'synthetic-provider-fixture',
+  ADROUTER_ENABLED: 'true', ADROUTER_PUBLIC_KEY: 'v3pk_00000000-0000-4000-8000-000000000001_' + 'p'.repeat(43) };
+const STREAM = 'data: {"choices":[{"delta":{"content":"Synthetic reply."},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
 const headers = { Origin: origin, 'Sec-Fetch-Site': 'same-origin', 'CF-Connecting-IP': '192.0.2.1' };
 
-async function start(overrides = {}, gateway = () => new Response(STREAM, { headers: { 'Content-Type': 'application/x-ndjson' } })) {
+async function start(overrides = {}) {
   const calls = [];
   const mf = new Miniflare(convertV4MiniflareOptions({ name: 'hearthside', modules: true, script, compatibilityDate: '2026-10-18',
     bindings: { ...bindings, ...overrides }, serviceBindings: { ASSETS: () => new Response('Not found', { status: 404 }) },
     outboundService: async request => {
-      const url = new URL(request.url), body = await request.text();
-      calls.push({ method: request.method, url: url.origin + url.pathname, authorization: request.headers.get('Authorization'), body });
+      const url = new URL(request.url); await request.text();
+      calls.push(`${request.method} ${url.origin}${url.pathname}`);
       if (url.origin === 'https://challenges.cloudflare.com') return Response.json({ success: true, hostname: 'hearthside-chat.pages.dev', action: 'chat' });
-      if (url.origin === GATEWAY) return gateway(url);
+      if (url.origin === 'https://api.deepseek.com') return new Response(STREAM, { headers: { 'Content-Type': 'text/event-stream' } });
       return new Response('Unexpected outbound request', { status: 599 });
     } }));
+  return { mf, calls };
+}
+async function chat(mf) {
   const session = await mf.dispatchFetch(origin + '/api/session', { method: 'POST', headers });
   assert.equal(session.status, 200);
-  return { mf, calls, cookie: session.headers.get('Set-Cookie').split(';')[0] };
+  return mf.dispatchFetch(origin + '/api/chat', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json',
+    Cookie: session.headers.get('Set-Cookie').split(';')[0] },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'A synthetic test.' }], turnstile: 'synthetic-one-use-token' }) });
 }
-const chat = (mf, cookie) => mf.dispatchFetch(origin + '/api/chat', { method: 'POST',
-  headers: { ...headers, Cookie: cookie, 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-  body: JSON.stringify({ contract_version: '3.0-mvp.1', interaction_id: crypto.randomUUID(), created_at: new Date().toISOString(),
-    messages: [{ role: 'user', content: 'A synthetic test.' }], sponsorship_enabled: true, turnstile_token: 'synthetic-one-use-token' }) });
 
-test('chat verifies Turnstile once and streams the gateway reply in workerd', async () => {
-  const { mf, calls, cookie } = await start();
+test('workerd: Rowan answers through DeepSeek directly; AdRouter is never called by the server', async () => {
+  const { mf, calls } = await start();
   try {
-    const response = await chat(mf, cookie);
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get('Content-Type'), 'application/x-ndjson');
-    assert.match(response.headers.get('Cache-Control'), /no-transform/);
-    assert.equal(await response.text(), STREAM);
-    assert.deepEqual(calls.map(call => `${call.method} ${call.url}`),
-      ['POST https://challenges.cloudflare.com/turnstile/v0/siteverify', `POST ${GATEWAY}/v3/gateway/turns`]);
-    const turn = JSON.parse(calls[1].body);
-    assert.equal(calls[1].authorization, 'Bearer synthetic-app-credential-fixture');
-    assert.equal(turn.messages[0].role, 'system');
-    assert.match(turn.messages[0].content, /You are Rowan/);
-    assert.equal(turn.provider_connection_id, 'synthetic-connection');
-    assert.equal(turn.sponsorship.placement_id, 'synthetic-placement');
-    assert.equal(calls[1].body.includes('192.0.2.1'), false);
+    const reply = await chat(mf);
+    assert.equal(reply.status, 200);
+    assert.equal(await reply.text(), '{"type":"text","text":"Synthetic reply."}\n{"type":"done"}\n');
+    assert.equal(reply.headers.get('Cache-Control'), 'no-store, no-transform');
+    assert.match(reply.headers.get('Content-Security-Policy'), /connect-src [^;]*https:\/\/api\.adrouter\.co/);
+    assert.deepEqual(calls, ['POST https://challenges.cloudflare.com/turnstile/v0/siteverify', 'POST https://api.deepseek.com/chat/completions']);
+    const config = await (await mf.dispatchFetch(origin + '/api/config')).json();
+    assert.equal(config.enabled, true);
+    assert.deepEqual(config.sponsors, { publicKey: bindings.ADROUTER_PUBLIC_KEY, apiOrigin: 'https://api.adrouter.co' });
   } finally { await mf.dispose(); }
 });
 
-test('status, cancel, feedback and client events relay to the gateway in workerd', async () => {
-  const { mf, calls, cookie } = await start({}, () => Response.json({}));
+test('workerd: with sponsors off the chat is unchanged; with chat paused nothing paid starts', async () => {
+  const ads = await start({ ADROUTER_ENABLED: 'false' });
   try {
-    const post = (path, body) => mf.dispatchFetch(origin + path, { method: 'POST',
-      headers: { ...headers, Cookie: cookie, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
-    const responses = [
-      await mf.dispatchFetch(origin + '/api/turns/synthetic-turn', { headers: { ...headers, Cookie: cookie } }),
-      await post('/api/turns/synthetic-turn/cancel'),
-      await post('/api/feedback', { contract_version: '3.0-mvp.1', feedback_id: crypto.randomUUID(), turn_id: 'synthetic-turn', answer: 'helpful' }),
-      await post('/api/client-events', { contract_version: '3.0-mvp.1', event_id: crypto.randomUUID(), turn_id: 'synthetic-turn',
-        type: 'stream_completed', occurred_at: new Date().toISOString(), sdk_version: '0.1.1' })];
-    assert.deepEqual(responses.map(response => response.status), [200, 200, 200, 200]);
-    assert.deepEqual(calls.map(call => `${call.method} ${call.url}`), [`GET ${GATEWAY}/v3/gateway/turns/synthetic-turn`,
-      `POST ${GATEWAY}/v3/gateway/turns/synthetic-turn/cancel`, `POST ${GATEWAY}/v3/publisher/feedback`, `POST ${GATEWAY}/v3/publisher/client-events`]);
-  } finally { await mf.dispose(); }
-});
-
-test('paused publisher refuses chat in workerd with no outbound call', async () => {
-  const { mf, calls, cookie } = await start({ ADROUTER_ENABLED: 'false' });
+    assert.equal((await chat(ads.mf)).status, 200);
+    assert.equal((await (await ads.mf.dispatchFetch(origin + '/api/config')).json()).sponsors, null);
+  } finally { await ads.mf.dispose(); }
+  const paused = await start({ CHAT_ENABLED: 'false' });
   try {
-    const response = await chat(mf, cookie);
-    assert.equal(response.status, 503);
-    assert.equal((await response.json()).error.code, 'app_disabled');
-    assert.equal(calls.length, 0);
-  } finally { await mf.dispose(); }
-});
-
-test('a gateway redirect is refused, not followed or forwarded, in workerd', async () => {
-  const { mf, calls, cookie } = await start({}, () => new Response(null, { status: 302, headers: { Location: 'https://elsewhere.example/' } }));
-  try {
-    const response = await chat(mf, cookie);
-    assert.equal(response.status, 503);
-    assert.equal((await response.json()).error.code, 'service_unavailable');
-    assert.equal(response.headers.has('Location'), false);
-    assert.deepEqual(calls.map(call => call.url), ['https://challenges.cloudflare.com/turnstile/v0/siteverify', `${GATEWAY}/v3/gateway/turns`]);
-  } finally { await mf.dispose(); }
+    const reply = await chat(paused.mf);
+    assert.equal(reply.status, 503); assert.deepEqual(await reply.json(), { error: 'chat_paused' });
+    assert.deepEqual(paused.calls, []);
+  } finally { await paused.mf.dispose(); }
 });

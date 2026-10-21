@@ -1,3 +1,26 @@
+# Plan: Sponsor-only AdRouter integration — 21 October 2026
+
+AdRouter retired its inference gateway (operator decision D7, 21 October 2026; Router
+`docs/adrouter-3-sponsor-match-spec.md`). Hearthside calls DeepSeek itself again and asks AdRouter
+only for a sponsor, for the second Hearthside test (S7).
+
+### Status
+`review`
+### Tasks
+- [x] Restore the standalone DeepSeek chat, session cookie, Turnstile and history trimming from `v0.1-standalone`, behind `CHAT_ENABLED`.
+- [x] Remove the gateway proxy routes (session relay, turns, feedback, client events) and `server/adrouter.ts`.
+- [x] Sponsors from the page: SDK 0.4.0 `match()` beside the chat request, publishable key from `/api/config`, card beside a complete answer, opt-out kept.
+- [x] CSP allows `https://api.adrouter.co`; vendored SDK bundle with recorded source commit and SHA-256.
+- [x] Tests: chat and config, workerd Functions, Chromium/WebKit including AdRouter unreachable.
+- [ ] Re-vendor the bundle from merged Router `main`; operator sets `DEEPSEEK_API_KEY` (fresh key) and `ADROUTER_PUBLIC_KEY`, deploys, enables chat then sponsors.
+- [ ] S7 checks H1–H6.
+### Acceptance Criteria
+- [x] Chat never depends on AdRouter: off, paused, failing or unreachable AdRouter gives the same answer and no visible error.
+- [x] Only the latest message goes to AdRouter, and only when sponsors are on and the visitor has not opted out.
+- [x] No server credential or prompt in the browser bundle.
+
+---
+
 # Plan: Standalone Hearthside publisher
 
 ## Goal

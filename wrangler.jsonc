@@ -4,8 +4,6 @@
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-10-18",
   "vars": {
-    "PUBLIC_ORIGIN": "https://hearthside-chat.pages.dev",
-    "ADROUTER_GATEWAY_ORIGIN": "https://adrouter-v3.fly.dev",
-    "ADROUTER_MODEL": "deepseek-v4-flash"
+    "PUBLIC_ORIGIN": "https://hearthside-chat.pages.dev"
   }
 }

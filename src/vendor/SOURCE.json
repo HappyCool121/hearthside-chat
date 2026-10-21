@@ -1,0 +1,9 @@
+{
+  "package": "@adrouter/browser-sdk",
+  "version": "0.4.0",
+  "status": "release candidate; replace with the GitHub release asset once 0.4.0 is published",
+  "source_repository": "adrouter/adrouter-dashboard",
+  "source_commit": "fa0f7580cabf06b536a5b490f1606bd279a2b65c",
+  "build": "npm --prefix sdk run build (dist/adrouter.min.js)",
+  "sha256": "337dc06f059f276794769cda3dea805cb0eb121af9bb63ab0b25bc17bc4c88cb"
+}
