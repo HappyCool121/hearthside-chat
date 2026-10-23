@@ -1,5 +1,9 @@
 # Plan: Standalone Hearthside publisher
 
+**Status, 23 October 2026: development halted indefinitely.** AdRouter stopped all development.
+The deployed site stays live as it is, and this repository is kept for reference. No further work
+is planned.
+
 ## Goal
 Prove one independent character chat on its public Pages URL before any gateway integration.
 
